@@ -1,0 +1,79 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: inquiries
+    // Document ID: Auto-generated
+    // Fields:
+    //   - name: string (required, length < 100) - Client's full name
+    //   - business: string (required, length < 100) - Business name
+    //   - location: string (required, length < 100) - City, State
+    //   - phone: string (required, length < 20) - Phone number
+    //   - volume: string (required, length < 50) - Monthly volume requirement
+    //   - requirements: string (required, length < 2000) - Specific requirements
+    //   - date: string (required, ISO 8601 format) - Submission date
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    // Check if the user is authenticated
+    function isAuthenticated() {
+       return request.auth != null;
+    }
+    
+    // Check if the user is an admin
+    // Replace the email below with the actual admin email you want to use
+    function isAdmin() {
+       return isAuthenticated() && request.auth.token.email == 'gani.agarwal.ug21@nsut.ac.in';
+    }
+
+    // Validate string length
+    function validStringLength(field, minLen, maxLen) {
+       return request.resource.data[field] is string &&
+         request.resource.data[field].size() >= minLen &&
+         request.resource.data[field].size() <= maxLen;
+    }
+
+    // Validate ISO 8601 date string format (YYYY-MM-DDTHH:MM:SS)
+    function isValidDateString(dateStr) {
+      return dateStr is string &&
+        dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    // Validate that the document contains only the allowed fields
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // Domain Validator for Inquiry
+    function isValidInquiry() {
+      return hasOnlyAllowedFields(['name', 'business', 'location', 'phone', 'volume', 'requirements', 'date']) &&
+             validStringLength('name', 1, 100) &&
+             validStringLength('business', 1, 100) &&
+             validStringLength('location', 1, 100) &&
+             validStringLength('phone', 1, 20) &&
+             validStringLength('volume', 1, 50) &&
+             validStringLength('requirements', 0, 2000) &&
+             isValidDateString(request.resource.data.date);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /inquiries/{inquiryId} {
+      // Anyone can create an inquiry (submit the contact form)
+      // We strictly validate the data to ensure they don't submit garbage or massive payloads
+      allow create: if isValidInquiry();
+        
+      // Only admins can read, update, or delete inquiries
+      allow read, update, delete: if isAdmin();
+    }
+  }
+}
